@@ -3,14 +3,18 @@
 import re
 import ast
 import pandas as pd
+import numpy as np
 import dask
+import dask.array as da
 import dask.dataframe as dd
 from collections import UserList
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple, Union
 # from ...intermediate import Intermediate
 # from ...dtypes import DType, Nominal, Continuous, DateTime, detect_dtype, get_dtype_cnts_and_num_cols, is_dtype
 # from ....errors import UnreachableError
+# from ...configs import Config
 
+from dataprep.eda.configs import Config
 from dataprep.eda.intermediate import Intermediate
 from dataprep.eda.dtypes import DType, Nominal, Continuous, DateTime, detect_dtype, get_dtype_cnts_and_num_cols, is_dtype
 from dataprep.errors import UnreachableError
@@ -51,7 +55,7 @@ class Dfs(UserList):
                 output.append(getattr(df, method)())
         return Dfs(output)
 
-    def getidx(self, ind: int) -> List[Any]:
+    def getidx(self, ind: str) -> List[Any]:
         """
         Get the specified index for all elements in the list.
         """
@@ -63,51 +67,76 @@ class Dfs(UserList):
 
 class Srs(UserList):
     """
-    This class separates the columns with the same name into individual series.
+    This class **separates** the columns with the same name into individual series.
     """
-    def __init__(self, srs: dd.DataFrame) -> None:
-        if len(srs.shape) > 1:
-            self.data: List[dd.Series] = [srs.iloc[:, loc] for loc in range(srs.shape[1])]
+    def __init__(self, srs: dd.DataFrame, agg: bool = False) -> None:
+        if agg:
+            self.data = srs
         else:
-            self.data: List[dd.Series] = [srs]
+            if len(srs.shape) > 1:
+                self.data: List[dd.Series] = [srs.iloc[:, loc] for loc in range(srs.shape[1])]
+            else:
+                self.data: List[dd.Series] = [srs]
 
-    def __getattr__(self, attr: str) -> List[Any]:
+    def __getattr__(self, attr: str) -> UserList:
         output = []
         for srs in self.data:
             output.append(getattr(srs, attr))
-        return output
+        return Srs(output, agg=True)
 
-    def apply(self, method: str) -> List[Any]:
+    def apply(self, method: str) -> UserList:
         """
         Apply the same method for all elements in the list.
         """
         params = re.search(r'\((.*?)\)', method)
         if params:
-            params = params.group(1)
+            params = str(params.group(1))
         else:
-            params = ''
+            params = ""
 
         output = []
         for srs in self.data:
             if len(params) > 0:
                 method = method.replace(params, '').replace('()', '')
-                try:
-                    params = ast.literal_eval(params)
-                except:
-                    pass
-                output.append(getattr(srs, method)(params))
+                if isinstance(params, str) and "=" not in params:
+                    output.append(getattr(srs, method)(eval(params))) # is it the only choice?
+                else:
+                    output.append(getattr(srs, method)(params))
             else:
                 output.append(getattr(srs, method)())
+        return Srs(output, agg=True)
+
+    def getidx(self, ind: str) -> List[Any]:
+        """
+        Get the specified index for all elements in the list.
+        """
+        output = []
+        for data in self.data:
+            output.append(data[ind])
+
         return output
 
-    def self_map(self, func: Callable[[dd.Series], Any], **kwargs: Any) -> Any:
+    def getmask(self, mask: Union[List[dd.Series], UserList], inverse: bool = False) -> List[dd.Series]:
+        """
+        Return rows based on a boolean mask.
+        """
+        output = []
+        for data, cond in zip(self.data, mask):
+            if inverse:
+                output.append(data[~cond])
+            else:
+                output.append(data[cond])
+
+        return output
+
+    def self_map(self, func: Callable[[dd.Series], Any], **kwargs: Any) -> List[Any]:
         """
         Map the data to the given function.
         """
         return [func(srs, **kwargs) for srs in self.data]
 
 
-def compare_multiple_df(df_list: List[dd.DataFrame]) -> Intermediate:
+def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Config) -> Intermediate:
     """
     Compute function for plot_diff([df...])
 
@@ -120,9 +149,10 @@ def compare_multiple_df(df_list: List[dd.DataFrame]) -> Intermediate:
     candidate_rank_idx = _get_candidate(dfs)
 
 
-    datas: List[Any] = []
-    aligned_dfs = pd.concat(Dfs(dfs),axis=1, copy=False)
+    data: List[Any] = []
+    aligned_dfs = dd.concat(df_list, axis=1, copy=False)
     all_columns = set().union(*dfs.columns)
+    # todo: whether to construct non-existing columns for all candidates
 
     # extract the first rows for checking if a column contains a mutable type
     first_rows = aligned_dfs.head()  # dd.DataFrame.head triggers a (small) data read
@@ -135,34 +165,40 @@ def compare_multiple_df(df_list: List[dd.DataFrame]) -> Intermediate:
         else:
             col_dtype = col_dtype[0]
 
-        if is_dtype(col_dtype, Nominal()):
+        if is_dtype(col_dtype, Continuous()) and cfg.hist.enable:
+            data.append((col, Continuous(), _cont_calcs(srs.apply("dropna"), cfg)))
+        elif is_dtype(col_dtype, Nominal()) and cfg.bar.enable:
             try:
                 first_rows[col].apply(hash)
             except TypeError:
                 srs = srs.apply("astype(str)")
-            datas.append(calc_nom_col(srs.apply("dropna"), first_rows[col]))
-        elif is_dtype(col_dtype, Continuous()):
-            ## if cfg.hist_enable or cfg.any_insights("hist"):
-            # datas.append(calc_cont_col(srs.apply("dropna"), bins))
-            print(f"continues: {col}")
-        elif is_dtype(col_dtype, DateTime()):
-            # datas.append(dask.delayed(_calc_line_dt)(df[[col]], timeunit))
-            print(f"dt: {col}")
-        else:
-            raise UnreachableError
+            data.append((col, Nominal(), _nom_calcs(srs.apply("dropna"), cfg)))
+        elif is_dtype(col_dtype, DateTime()) and cfg.line.enable:
+            # data.append((col, DateTime(), dask.delayed(_calc_line_dt)(df[[col]], cfg.line.unit)))
+            pass
 
-    stats = calc_stats(dfs)
+    stats = calc_stats(dfs, cfg)
+    data, stats = dask.compute(data, stats)
+    plot_data = []
 
-    stats = dask.compute(stats)
-
+    for col, dtp, datum in data:
+        if is_dtype(dtp, Continuous()):
+            if cfg.hist.enable:
+                plot_data.append((col, dtp, datum["hist"]))
+        elif is_dtype(dtp, Nominal()):
+            if cfg.bar.enable:
+                plot_data.append((col, dtp, (datum["bar"].apply("to_frame"), datum["nuniq"])))
+        elif is_dtype(dtp, DateTime()):
+            plot_data.append((col, dtp, datum))
 
     return Intermediate(
+        data = plot_data,
         stats = stats,
         visual_type = "compare_multiple_dfs"
     )
 
 
-def calc_stats(dfs: Dfs) -> Dict[str, List[str]]:
+def calc_stats(dfs: Dfs, cfg: Config) -> Dict[str, List[str]]:
     """
     Calculate the statistics for plot_diff([df1, df2, ..., dfn])
 
@@ -171,26 +207,61 @@ def calc_stats(dfs: Dfs) -> Dict[str, List[str]]:
     dfs
         DataFrames to be compared
     """
+    stats: Dict[str, List[Any]] = {"nrows": dfs.shape.getidx(0)}
     dtype_cnts = []
     num_cols = []
-    for df in dfs:
-        temp = get_dtype_cnts_and_num_cols(df, dtype=None)
-        dtype_cnts.append(temp[0])
-        num_cols.append(temp[1])
+    if cfg.stats.enable:
+        for df in dfs:
+            temp = get_dtype_cnts_and_num_cols(df, dtype=None)
+            dtype_cnts.append(temp[0])
+            num_cols.append(temp[1])
 
-    stats: Dict[str, List[Any]] = {"nrows": dfs.shape.getidx(0)}
-
-    stats["ncols"] = dfs.shape.getidx(1)
-    stats["npresent_cells"] = dfs.apply("count")
-    stats["nrows_wo_dups"] = dfs.apply("drop_duplicates").shape.getidx(0)
-    stats["mem_use"] = dfs.apply("memory_usage(deep=True)").apply("sum")
-    stats["dtype_cnts"] = dtype_cnts
+        stats["ncols"] = dfs.shape.getidx(1)
+        stats["npresent_cells"] = dfs.apply("count")
+        stats["nrows_wo_dups"] = dfs.apply("drop_duplicates").shape.getidx(0)
+        stats["mem_use"] = dfs.apply("memory_usage(deep=True)").apply("sum")
+        stats["dtype_cnts"] = dtype_cnts
 
     return stats
 
 
-def calc_plot_data(df_list: List[dd.DataFrame]) -> List[Any]:
-    pass
+def _cont_calcs(srs: Srs, cfg: Config) -> Dict[str, List[Any]]:
+    """
+    Computations for a continuous column in plot_diff([df1, df2, ..., dfn])
+    """
+
+    data: Dict[str, List[Any]] = {}
+
+    # drop infinite values
+    mask = srs.apply("isin({np.inf, -np.inf})")
+    srs = Srs(srs.getmask(mask, inverse=True), agg=True)
+
+    # histogram
+    data["hist"] = srs.self_map(da.histogram, bins=cfg.hist.bins, range=(
+        min(dask.compute(*srs.apply("min"))), max(dask.compute(*srs.apply("max")))
+        ))
+
+    return data
+
+
+def _nom_calcs(srs: Srs, cfg: Config) -> Dict[str, List[Any]]:
+    """
+    Computations for a nominal column in plot_diff([df1, df2, ..., dfn])
+    """
+    # dictionary of data for the bar chart and related insights
+    data: Dict[str, List[Any]] = {}
+
+    # value counts for barchart and uniformity insight
+    grps = srs.apply("value_counts(sort=False)")
+
+    if cfg.bar.enable:
+        # select the largest or smallest groups
+        data["bar"] = (
+            grps.apply(f"nlargest({cfg.bar.bars})") if cfg.bar.sort_descending else grps.apply(f"nsmallest({cfg.bar.bars})")
+        )
+        data["nuniq"] = grps.shape.getidx(0)
+
+    return data
 
 
 def _get_candidate(dfs: Dfs) -> List[int]:
@@ -200,8 +271,8 @@ def _get_candidate(dfs: Dfs) -> List[int]:
     dfs = dfs.apply('dropna')
     candidates = []
 
-    dim: Dfs = dfs.shape
-    major_candidate = dim.getidx(0)
+    dim = dfs.shape
+    major_candidate = dask.compute(dim.getidx(0))[0]
     secondary_candidate = dim.getidx(1)
 
     candidates.append(major_candidate.index(max(major_candidate)))
@@ -210,6 +281,7 @@ def _get_candidate(dfs: Dfs) -> List[int]:
     #todo: there might be a better way to do this
     return candidates
 
+
 if __name__ == "__main__":
     df1 = pd.read_csv("https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv")
     df2 = df1.copy()
@@ -217,5 +289,9 @@ if __name__ == "__main__":
     df2['Age'] = df1['Age'] + 10
     df2['Extra'] = df1['Sex']
     df3 = df1.iloc[:800, :]
+    df = [df1, df2, df3]
 
-    compare_multiple_df([df1, df2, df3])
+    from dataprep.eda.utils import to_dask
+
+    itmdt = compare_multiple_df(list(map(to_dask, df)), cfg=Config())
+    print('EOF')
