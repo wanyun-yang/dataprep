@@ -152,7 +152,6 @@ def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Config) -> Intermediat
     data: List[Any] = []
     aligned_dfs = dd.concat(df_list, axis=1, copy=False)
     all_columns = set().union(*dfs.columns)
-    # todo: whether to construct non-existing columns for all candidates
 
     # extract the first rows for checking if a column contains a mutable type
     first_rows = aligned_dfs.head()  # dd.DataFrame.head triggers a (small) data read
@@ -168,10 +167,16 @@ def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Config) -> Intermediat
         if is_dtype(col_dtype, Continuous()) and cfg.hist.enable:
             data.append((col, Continuous(), _cont_calcs(srs.apply("dropna"), cfg)))
         elif is_dtype(col_dtype, Nominal()) and cfg.bar.enable:
-            try:
-                first_rows[col].apply(hash)
-            except TypeError:
-                srs = srs.apply("astype(str)")
+            if len(first_rows[col].shape) > 1: # exception for singular column
+                try:
+                    first_rows[col].iloc[:, candidate_rank_idx[1]].apply(hash)
+                except TypeError:
+                    srs = srs.apply("dropna").apply("astype(str)")
+            else:
+                try:
+                    first_rows[col].apply(hash)
+                except TypeError:
+                    srs = srs.apply("dropna").apply("astype(str)")
             data.append((col, Nominal(), _nom_calcs(srs.apply("dropna"), cfg)))
         elif is_dtype(col_dtype, DateTime()) and cfg.line.enable:
             # data.append((col, DateTime(), dask.delayed(_calc_line_dt)(df[[col]], cfg.line.unit)))
