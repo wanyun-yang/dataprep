@@ -183,7 +183,8 @@ def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Config) -> Intermediat
             pass
 
     stats = calc_stats(dfs, cfg)
-    data, stats = dask.compute(data, stats)
+    data = [dask.compute(*i) for i in data]
+    stats = {k: dask.compute(*v) for k, v in stats.items()}
     plot_data = []
 
     for col, dtp, datum in data:
@@ -192,7 +193,7 @@ def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Config) -> Intermediat
                 plot_data.append((col, dtp, datum["hist"]))
         elif is_dtype(dtp, Nominal()):
             if cfg.bar.enable:
-                plot_data.append((col, dtp, (datum["bar"].apply("to_frame"), datum["nuniq"])))
+                plot_data.append((col, dtp, (dask.compute(*datum["bar"].apply("to_frame")), datum["nuniq"])))
         elif is_dtype(dtp, DateTime()):
             plot_data.append((col, dtp, datum))
 
