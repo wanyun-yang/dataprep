@@ -184,7 +184,7 @@ def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Config) -> Intermediat
 
     stats = calc_stats(dfs, cfg)
     data = [dask.compute(*i) for i in data]
-    stats = {k: dask.compute(*v) for k, v in stats.items()}
+    stats = {k: list(dask.compute(*v)) for k, v in stats.items()}
     plot_data = []
 
     for col, dtp, datum in data:
@@ -200,6 +200,7 @@ def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Config) -> Intermediat
     return Intermediate(
         data = plot_data,
         stats = stats,
+        target_cnt = len(df_list),
         visual_type = "compare_multiple_dfs"
     )
 
@@ -223,7 +224,7 @@ def calc_stats(dfs: Dfs, cfg: Config) -> Dict[str, List[str]]:
             num_cols.append(temp[1])
 
         stats["ncols"] = dfs.shape.getidx(1)
-        stats["npresent_cells"] = dfs.apply("count")
+        stats["npresent_cells"] = dfs.apply("count").apply("sum")
         stats["nrows_wo_dups"] = dfs.apply("drop_duplicates").shape.getidx(0)
         stats["mem_use"] = dfs.apply("memory_usage(deep=True)").apply("sum")
         stats["dtype_cnts"] = dtype_cnts
