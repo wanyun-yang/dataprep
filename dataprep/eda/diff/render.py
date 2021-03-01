@@ -219,26 +219,6 @@ def _format_values(key: str, value: List[Any]) -> List[str]:
         continue
     return value
 
-def _empty_figure(title: str, plot_height: int, plot_width: int) -> Figure:
-    # If no data to render in the heatmap, i.e. no missing values
-    # we render a blank heatmap
-    fig = Figure(
-        x_range=[],
-        y_range=[],
-        plot_height=plot_height,
-        plot_width=plot_width,
-        title=title,
-        x_axis_location="below",
-        tools="hover",
-        toolbar_location=None,
-        background_fill_color="#fafafa",
-    )
-
-    # Add at least one renderer to fig, otherwise bokeh
-    # gives us error -1000 (MISSING_RENDERERS): Plot has no renderers
-    fig.rect(x=0, y=0, width=0, height=0)
-    return fig
-
 
 def _align_cols(col: str, target_cnt: int, df_list: Union[List[pd.DataFrame], pd.DataFrame], nrows: List[int]) -> Tuple[List[pd.DataFrame], List[int]]:
     """
@@ -287,10 +267,11 @@ def bar_viz(
     df.index = [str(val) for val in df.index]
 
     tooltips = [(col, "@col_name"), ("Count", "@count"), ("Percent", "@pct{0.2f}%")]
-    # todo
-    # if show_yticks:
-    #     if len(df) > 10:
-    #         plot_width = 28 * len(df)
+
+    if show_yticks:
+        if len(df) > 10:
+            plot_width = 28 * len(df)
+
     x_ticks = [(ind, df_label) for ind in df.index for df_label in df_labels]
     count = sum(zip(*[df[f"df{i+1}"] for i in range(target_cnt)]), ())
     col_name = sum(zip(*[df.index for _ in range(target_cnt)]), ())
@@ -314,37 +295,24 @@ def bar_viz(
         fig.xaxis.axis_label = f"Top {len(df)} of {ttl_grps[0]} {col}"
         fig.xaxis.axis_label_standoff = 0
 
-    # todo
-    # if show_yticks and yscale == "linear":
-    #     _format_axis(fig, 0, df[col].max(), "y")
+    if show_yticks and yscale == "linear":
+        _format_axis(fig, 0, df.max().max(), "y")
     return fig
 
 def hist_viz(
-    hist: Tuple[np.ndarray, np.ndarray],
+    hist: List[Tuple[np.ndarray, np.ndarray]],
     nrows: int,
     col: str,
     yscale: str,
     plot_width: int,
     plot_height: int,
     show_yticks: bool,
+    df_labels: List[str],
 ) -> Figure:
     """
     Render a histogram
     """
     # pylint: disable=too-many-arguments,too-many-locals
-    counts, bins = hist
-    if sum(counts) == 0:
-        return _empty_figure(col, plot_height, plot_width)
-    intvls = _format_bin_intervals(bins)
-    df = pd.DataFrame(
-        {
-            "intvl": intvls,
-            "left": bins[:-1],
-            "right": bins[1:],
-            "freq": counts,
-            "pct": counts / nrows * 100,
-        }
-    )
 
     tooltips = [("Bin", "@intvl"), ("Frequency", "@freq"), ("Percent", "@pct{0.2f}%")]
     fig = Figure(
@@ -354,21 +322,42 @@ def hist_viz(
         toolbar_location=None,
         y_axis_type=yscale,
     )
-    bottom = 0 if yscale == "linear" or df.empty else df["freq"].min() / 2
-    fig.quad(
-        source=df,
-        left="left",
-        right="right",
-        bottom=bottom,
-        alpha=0.5,
-        top="freq",
-        fill_color="#6baed6",
-    )
-    hover = HoverTool(tooltips=tooltips, mode="vline")
-    fig.add_tools(hover)
+
+    for i in range(len(hist)):
+        counts, bins = hist[i]
+        if sum(counts) == 0:
+            fig.rect(x=0, y=0, width=0, height=0)
+            continue
+        intvls = _format_bin_intervals(bins)
+        df = pd.DataFrame({
+            "intvl": intvls,
+            "left": bins[:-1],
+            "right": bins[1:],
+            "freq": counts,
+            "pct": counts / nrows[i] * 100
+        })
+        bottom = 0 if yscale == "linear" or df.empty else counts.min() / 2
+        fig.quad(
+            source=df,
+            left="left",
+            right="right",
+            bottom=bottom,
+            alpha=0.5,
+            top="freq",
+            fill_color="#6baed6",
+            legend_label=df_labels[i]
+        )
+        hover = HoverTool(tooltips=tooltips, mode="vline")
+        fig.add_tools(hover)
+
     tweak_figure(fig, "hist", show_yticks)
     fig.yaxis.axis_label = "Frequency"
+    fig.legend.location = "top_center"
+    fig.legend.click_policy="hide"
+    fig.legend.orientation='horizontal'
     _format_axis(fig, df.iloc[0]["left"], df.iloc[-1]["right"], "x")
+
+    # todo
     if show_yticks:
         fig.xaxis.axis_label = col
         if yscale == "linear":
@@ -405,9 +394,10 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
     # pylint: disable=too-many-locals
     plot_width = cfg.plot.width if cfg.plot.width is not None else 324
     plot_height = cfg.plot.height if cfg.plot.height is not None else 300
-
+    df_labels = ['df1', 'df2', 'df3'] # todo: add to config
     figs: List[Figure] = []
     nrows = itmdt["stats"]["nrows"]
+    target_cnt = itmdt["target_cnt"]
     titles: List[str] = []
     for col, dtp, data in itmdt["data"]:
         if is_dtype(dtp, Nominal()):
@@ -421,14 +411,17 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
                 plot_width,
                 plot_height,
                 False,
+                target_cnt,
+                df_labels
             )
         elif is_dtype(dtp, Continuous()):
-            fig = hist_viz(data, nrows, col, cfg.hist.yscale, plot_width, plot_height, False)
+            fig = hist_viz(data, nrows, col, cfg.hist.yscale, plot_width, plot_height, False, df_labels)
         elif is_dtype(dtp, DateTime()):
-            df, timeunit, miss_pct = data
-            fig = dt_line_viz(
-                df, col, timeunit, cfg.line.yscale, plot_width, plot_height, False, miss_pct
-            )
+            # df, timeunit, miss_pct = data
+            # fig = dt_line_viz(
+            #     df, col, timeunit, cfg.line.yscale, plot_width, plot_height, False, miss_pct
+            # )
+            continue
         fig.frame_height = plot_height
         titles.append(fig.title.text)
         fig.title.text = ""
