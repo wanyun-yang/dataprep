@@ -8,16 +8,16 @@ import dask
 import dask.array as da
 import dask.dataframe as dd
 from collections import UserList
-from typing import Any, Callable, Dict, List, Tuple, Union
-# from ...intermediate import Intermediate
-# from ...dtypes import DType, Nominal, Continuous, DateTime, detect_dtype, get_dtype_cnts_and_num_cols, is_dtype
-# from ....errors import UnreachableError
-# from ...configs import Config
+from typing import Any, Callable, Dict, List, Tuple, Union, Optional
+from ...intermediate import Intermediate
+from ...dtypes import DType, Nominal, Continuous, DateTime, detect_dtype, get_dtype_cnts_and_num_cols, is_dtype
+from ....errors import UnreachableError
+from ...configs import Config
 
-from dataprep.eda.configs import Config
-from dataprep.eda.intermediate import Intermediate
-from dataprep.eda.dtypes import DType, Nominal, Continuous, DateTime, detect_dtype, get_dtype_cnts_and_num_cols, is_dtype
-from dataprep.errors import UnreachableError
+# from dataprep.eda.configs import Config
+# from dataprep.eda.intermediate import Intermediate
+# from dataprep.eda.dtypes import DType, Nominal, Continuous, DateTime, detect_dtype, get_dtype_cnts_and_num_cols, is_dtype
+# from dataprep.errors import UnreachableError
 
 class Dfs(UserList):
     """
@@ -136,7 +136,7 @@ class Srs(UserList):
         return [func(srs, **kwargs) for srs in self.data]
 
 
-def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Config) -> Intermediate:
+def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Optional[Dict[str, Any]] = None) -> Intermediate:
     """
     Compute function for plot_diff([df...])
 
@@ -201,7 +201,7 @@ def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Config) -> Intermediat
         data = plot_data,
         stats = stats,
         target_cnt = len(df_list),
-        visual_type = "compare_multiple_dfs"
+        visual_type = "comparison_grid"
     )
 
 

@@ -220,16 +220,13 @@ def _format_values(key: str, value: List[Any]) -> List[str]:
     return value
 
 
-def _align_cols(col: str, target_cnt: int, df_list: Union[List[pd.DataFrame], pd.DataFrame], nrows: List[int]) -> Tuple[List[pd.DataFrame], List[int]]:
+def _align_cols(col: str, target_cnt: int, df_list: List[pd.DataFrame], ttl_grps: List[int]) -> Tuple[List[pd.DataFrame], List[int]]:
     """
     To make the comparison clearer, we use 0 to fill the non-existing columns and their
     corresponding data from computation
     """
-    if isinstance(df_list, list):
-        base_cnt = len(df_list)
-    else:
-        base_cnt = len(nrows)
-        df_list = list(df_list)
+
+    base_cnt = len(df_list)
 
     if base_cnt < target_cnt:
         diff = target_cnt - base_cnt
@@ -237,13 +234,13 @@ def _align_cols(col: str, target_cnt: int, df_list: Union[List[pd.DataFrame], pd
         zero_clone[col] = 0
         for _ in range(diff):
             df_list.append(zero_clone)
-            nrows.append(nrows[0])
+            ttl_grps.append(ttl_grps[0])
 
-    return df_list, nrows
+    return df_list, ttl_grps
 
 
 def bar_viz(
-    df: Union[List[pd.DataFrame], pd.DataFrame],
+    df: List[pd.DataFrame],
     ttl_grps: List[int],
     nrows: List[int],
     col: str,
@@ -257,11 +254,11 @@ def bar_viz(
     """
     Render a bar chart
     """
+    # pylint: disable=too-many-arguments
 
-    df, nrows = _align_cols(col, target_cnt, df, nrows)
+    df, ttl_grps = _align_cols(col, target_cnt, df, ttl_grps)
     df = pd.concat(df, axis=1, copy=False, ignore_index=True).fillna(0)
     df.columns = df_labels
-    # pylint: disable=too-many-arguments
     for i in range(target_cnt):
         df[f"pct{i}"] = df[df_labels[i]] / nrows[i] * 100
     df.index = [str(val) for val in df.index]
@@ -357,7 +354,6 @@ def hist_viz(
     fig.legend.orientation='horizontal'
     _format_axis(fig, df.iloc[0]["left"], df.iloc[-1]["right"], "x")
 
-    # todo
     if show_yticks:
         fig.xaxis.axis_label = col
         if yscale == "linear":
@@ -403,7 +399,7 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
         if is_dtype(dtp, Nominal()):
             df, ttl_grps = data
             fig = bar_viz(
-                df,
+                list(df),
                 ttl_grps,
                 nrows,
                 col,
@@ -435,7 +431,7 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
     return {
         "layout": figs,
         "meta": titles,
-        "tabledata": format_ov_stats(itmdt["stats"]) if cfg.stats.enable else None,
+        "comparison_stats": format_ov_stats(itmdt["stats"]) if cfg.stats.enable else None,
         "container_width": plot_width * 3,
         "toggle_content": toggle_content,
     }

@@ -7,14 +7,43 @@
 </head>
 
 <body>
-    {% if context.tabledata or context.overview_insights%}
+    {% if context.tabledata or context.overview_insights or context.comparison_stats %}
     <div class="top-info-{{ context.rnd }}">
         <input type='checkbox' style='display: none' id="tb-{{ context.rnd }}">
         <label class="toggle-label-{{ context.rnd }}" for="tb-{{ context.rnd }}">
             {{ context.toggle_content }}
         </label>
         <div class="stats-{{ context.rnd }}">
-            {% if context.tabledata%}
+            {% if context.comparison_stats %}
+            <div class="comparison-stats-{{ context.rnd }}">
+                <div>
+                    <h3>Difference Overview</h3>
+                    <table>
+                        {% for th, td in context.comparison_stats[0].items() %}
+                        <tr>
+                            <th>{{ th }}</th>
+                            {% for df_stat in td %}
+                            <td>{{ df_stat }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                        <tr id="vtr-{{ context.rnd }}">
+                            <th style="vertical-align: top;">Variable Types</th>
+                            {% for vb_types in context.comparison_stats[1] %}
+                            <td>
+                                {% for tp, num in vb_types.items() %}
+                                <ul>
+                                    <li>{{ tp }}: {{ num }}</li>
+                                </ul>
+                                {% endfor %}
+                            </td>
+                            {% endfor %}
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+            {% if context.tabledata %}
             <div class="tabledata-{{ context.rnd }}">
                 <div>
                     <h3>Dataset Statistics</h3>
