@@ -270,7 +270,7 @@ def bar_viz(
             plot_width = 28 * len(df)
 
     x_ticks = [(ind, df_label) for ind in df.index for df_label in df_labels]
-    count = sum(zip(*[df[f"df{i+1}"] for i in range(target_cnt)]), ())
+    count = sum(zip(*[df[df_labels[i]] for i in range(target_cnt)]), ())
     col_name = sum(zip(*[df.index for _ in range(target_cnt)]), ())
     pct = sum(zip(*[df[f"pct{i}"] for i in range(target_cnt)]), ()) # index starts from 1
     data = ColumnDataSource(data=dict(x_ticks=x_ticks, count=count, col_name=col_name, pct=pct))
@@ -390,7 +390,7 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
     # pylint: disable=too-many-locals
     plot_width = cfg.plot.width if cfg.plot.width is not None else 324
     plot_height = cfg.plot.height if cfg.plot.height is not None else 300
-    df_labels = ['df1', 'df2', 'df3'] # todo: add to config
+    df_labels = cfg.diff.label
     figs: List[Figure] = []
     nrows = itmdt["stats"]["nrows"]
     target_cnt = itmdt["target_cnt"]
@@ -434,6 +434,7 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
         "comparison_stats": format_ov_stats(itmdt["stats"]) if cfg.stats.enable else None,
         "container_width": plot_width * 3,
         "toggle_content": toggle_content,
+        "df_labels": cfg.diff.label
     }
 
 

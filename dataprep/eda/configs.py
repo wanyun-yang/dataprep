@@ -73,6 +73,14 @@ class Plot(BaseModel):
     report: bool = False
 
 
+class Diff(BaseModel):
+    """
+    Define the parameters in the plot_diff
+    """
+
+    label: Union[List[str], None] = None
+
+
 class Stats(BaseModel):
     """
     enable: bool, default True
@@ -1094,6 +1102,7 @@ class Config(BaseModel):
     interactions: Interactions = Field(default_factory=Interactions)
     correlations: Correlations = Field(default_factory=Correlations)
     missingvalues: MissingValues = Field(default_factory=MissingValues)
+    diff: Diff = Field(default_factory=Diff)
 
     @classmethod
     def from_dict(

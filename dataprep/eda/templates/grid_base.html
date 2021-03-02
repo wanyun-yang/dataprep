@@ -19,6 +19,12 @@
                 <div>
                     <h3>Difference Overview</h3>
                     <table>
+                        <tr id="comp-label-{{ context.rnd }}">
+                            <th></th>
+                            {% for df_label in context.df_labels %}
+                            <td>{{ df_label }}</td>
+                            {% endfor %}
+                        </tr>
                         {% for th, td in context.comparison_stats[0].items() %}
                         <tr>
                             <th>{{ th }}</th>

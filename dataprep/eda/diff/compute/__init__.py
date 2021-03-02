@@ -24,6 +24,12 @@ def compute(
 
         assert len(df) >= 2
 
+        label = cfg.diff.label
+        if not label:
+            cfg.diff.label = [f"df{i+1}" for i in range(len(df))]
+        elif len(df) != len(label):
+            raise ValueError("Number of the given label doesn't match the number of DataFrames.")
+
         df_list = list(map(to_dask, df))
         if x:
             # return compare_multiple_on_column(df_list, x)
