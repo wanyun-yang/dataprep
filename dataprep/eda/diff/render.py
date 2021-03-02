@@ -23,7 +23,7 @@ from bokeh.models import (
     PrintfTickFormatter,
 )
 from bokeh.plotting import Figure, figure
-from bokeh.transform import cumsum, linear_cmap, transform
+from bokeh.transform import cumsum, factor_cmap, linear_cmap, transform
 from bokeh.util.hex import hexbin
 from pandas.core import base
 from scipy.stats import norm
@@ -32,7 +32,7 @@ from wordcloud import WordCloud
 from ..configs import Config
 from ..dtypes import Continuous, DateTime, Nominal, is_dtype
 from ..intermediate import Intermediate
-from ..palette import CATEGORY20, PASTEL1, RDBU, VIRIDIS
+from ..palette import CATEGORY10, CATEGORY20, PASTEL1, RDBU, VIRIDIS
 
 __all__ = ["render"]
 
@@ -220,7 +220,9 @@ def _format_values(key: str, value: List[Any]) -> List[str]:
     return value
 
 
-def _align_cols(col: str, target_cnt: int, df_list: List[pd.DataFrame], ttl_grps: List[int]) -> Tuple[List[pd.DataFrame], List[int]]:
+def _align_cols(
+    col: str, target_cnt: int, df_list: List[pd.DataFrame], ttl_grps: List[int]
+) -> Tuple[List[pd.DataFrame], List[int]]:
     """
     To make the comparison clearer, we use 0 to fill the non-existing columns and their
     corresponding data from computation
@@ -263,7 +265,12 @@ def bar_viz(
         df[f"pct{i}"] = df[df_labels[i]] / nrows[i] * 100
     df.index = [str(val) for val in df.index]
 
-    tooltips = [(col, "@col_name"), ("Count", "@count"), ("Percent", "@pct{0.2f}%")]
+    tooltips = [
+        (col, "@col_name"),
+        ("Count", "@count"),
+        ("Percent", "@pct{0.2f}%"),
+        ("Source", "@orig"),
+    ]
 
     if show_yticks:
         if len(df) > 10:
@@ -272,8 +279,11 @@ def bar_viz(
     x_ticks = [(ind, df_label) for ind in df.index for df_label in df_labels]
     count = sum(zip(*[df[df_labels[i]] for i in range(target_cnt)]), ())
     col_name = sum(zip(*[df.index for _ in range(target_cnt)]), ())
-    pct = sum(zip(*[df[f"pct{i}"] for i in range(target_cnt)]), ()) # index starts from 1
-    data = ColumnDataSource(data=dict(x_ticks=x_ticks, count=count, col_name=col_name, pct=pct))
+    pct = sum(zip(*[df[f"pct{i}"] for i in range(target_cnt)]), ())
+    orig = sum([df_labels for _ in range(len(df.index))], [])
+    data = ColumnDataSource(
+        data=dict(x_ticks=x_ticks, count=count, col_name=col_name, pct=pct, orig=orig)
+    )
 
     fig = Figure(
         plot_width=plot_width,
@@ -285,7 +295,14 @@ def bar_viz(
         x_range=FactorRange(*x_ticks),
         y_axis_type=yscale,
     )
-    fig.vbar(x="x_ticks", width=0.8, top='count', bottom=0.01, source=data)
+    fig.vbar(
+        x="x_ticks",
+        width=0.8,
+        top="count",
+        bottom=0.01,
+        source=data,
+        fill_color=factor_cmap("x_ticks", palette=CATEGORY10, factors=df_labels, start=1, end=2),
+    )
     tweak_figure(fig, "bar", show_yticks)
     fig.yaxis.axis_label = "Count"
     if ttl_grps[0] > len(df):
@@ -295,6 +312,7 @@ def bar_viz(
     if show_yticks and yscale == "linear":
         _format_axis(fig, 0, df.max().max(), "y")
     return fig
+
 
 def hist_viz(
     hist: List[Tuple[np.ndarray, np.ndarray]],
@@ -311,7 +329,12 @@ def hist_viz(
     """
     # pylint: disable=too-many-arguments,too-many-locals
 
-    tooltips = [("Bin", "@intvl"), ("Frequency", "@freq"), ("Percent", "@pct{0.2f}%")]
+    tooltips = [
+        ("Bin", "@intvl"),
+        ("Frequency", "@freq"),
+        ("Percent", "@pct{0.2f}%"),
+        ("Source", "@orig"),
+    ]
     fig = Figure(
         plot_height=plot_height,
         plot_width=plot_width,
@@ -326,13 +349,16 @@ def hist_viz(
             fig.rect(x=0, y=0, width=0, height=0)
             continue
         intvls = _format_bin_intervals(bins)
-        df = pd.DataFrame({
-            "intvl": intvls,
-            "left": bins[:-1],
-            "right": bins[1:],
-            "freq": counts,
-            "pct": counts / nrows[i] * 100
-        })
+        df = pd.DataFrame(
+            {
+                "intvl": intvls,
+                "left": bins[:-1],
+                "right": bins[1:],
+                "freq": counts,
+                "pct": counts / nrows[i] * 100,
+                "orig": df_labels[i],
+            }
+        )
         bottom = 0 if yscale == "linear" or df.empty else counts.min() / 2
         fig.quad(
             source=df,
@@ -341,8 +367,8 @@ def hist_viz(
             bottom=bottom,
             alpha=0.5,
             top="freq",
-            fill_color="#6baed6",
-            legend_label=df_labels[i]
+            fill_color=CATEGORY10[i],
+            legend_label=df_labels[i],
         )
         hover = HoverTool(tooltips=tooltips, mode="vline")
         fig.add_tools(hover)
@@ -350,8 +376,8 @@ def hist_viz(
     tweak_figure(fig, "hist", show_yticks)
     fig.yaxis.axis_label = "Frequency"
     fig.legend.location = "top_center"
-    fig.legend.click_policy="hide"
-    fig.legend.orientation='horizontal'
+    fig.legend.click_policy = "hide"
+    fig.legend.orientation = "horizontal"
     _format_axis(fig, df.iloc[0]["left"], df.iloc[-1]["right"], "x")
 
     if show_yticks:
@@ -408,10 +434,12 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
                 plot_height,
                 False,
                 target_cnt,
-                df_labels
+                df_labels,
             )
         elif is_dtype(dtp, Continuous()):
-            fig = hist_viz(data, nrows, col, cfg.hist.yscale, plot_width, plot_height, False, df_labels)
+            fig = hist_viz(
+                data, nrows, col, cfg.hist.yscale, plot_width, plot_height, False, df_labels
+            )
         elif is_dtype(dtp, DateTime()):
             # df, timeunit, miss_pct = data
             # fig = dt_line_viz(
@@ -434,7 +462,7 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
         "comparison_stats": format_ov_stats(itmdt["stats"]) if cfg.stats.enable else None,
         "container_width": plot_width * 3,
         "toggle_content": toggle_content,
-        "df_labels": cfg.diff.label
+        "df_labels": cfg.diff.label,
     }
 
 

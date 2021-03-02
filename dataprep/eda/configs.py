@@ -220,7 +220,7 @@ class Bar(BaseModel):
     """
 
     enable: bool = True
-    bars: int = 10
+    bars: int = 5
     sort_descending: bool = True
     yscale: str = "linear"
     color: str = "#1f77b4"

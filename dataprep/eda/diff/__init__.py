@@ -14,6 +14,7 @@ from .render import render
 
 __all__ = ["plot_diff"]
 
+
 def plot_diff(
     df: Union[List[Union[pd.DataFrame, dd.DataFrame]], Union[pd.DataFrame, dd.DataFrame]],
     x: Optional[str] = None,
@@ -50,11 +51,6 @@ def plot_diff(
     cfg = Config.from_dict(display, config)
 
     with ProgressBar(minimum=1, disable=not progress):
-        intermediate = compute(
-            df,
-            x=x,
-            window=window,
-            cfg=cfg
-        )
+        intermediate = compute(df, x=x, window=window, cfg=cfg)
     to_render = render(intermediate, cfg=cfg)
     return Container(to_render, intermediate.visual_type, cfg)

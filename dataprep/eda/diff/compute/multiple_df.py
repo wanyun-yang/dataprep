@@ -1,4 +1,4 @@
-#type: ignore
+# type: ignore
 """Computations for plot_diff([df1, df2, ..., dfn])."""
 import re
 import ast
@@ -10,7 +10,15 @@ import dask.dataframe as dd
 from collections import UserList
 from typing import Any, Callable, Dict, List, Tuple, Union, Optional
 from ...intermediate import Intermediate
-from ...dtypes import DType, Nominal, Continuous, DateTime, detect_dtype, get_dtype_cnts_and_num_cols, is_dtype
+from ...dtypes import (
+    DType,
+    Nominal,
+    Continuous,
+    DateTime,
+    detect_dtype,
+    get_dtype_cnts_and_num_cols,
+    is_dtype,
+)
 from ....errors import UnreachableError
 from ...configs import Config
 
@@ -19,10 +27,12 @@ from ...configs import Config
 # from dataprep.eda.dtypes import DType, Nominal, Continuous, DateTime, detect_dtype, get_dtype_cnts_and_num_cols, is_dtype
 # from dataprep.errors import UnreachableError
 
+
 class Dfs(UserList):
     """
     This class implements a sequence of DataFrames
     """
+
     def __init__(self, dfs: List[dd.DataFrame]) -> None:
         self.data = dfs
 
@@ -36,16 +46,16 @@ class Dfs(UserList):
         """
         Apply the same method for all elements in the list.
         """
-        params = re.search(r'\((.*?)\)', method)
+        params = re.search(r"\((.*?)\)", method)
         if params:
             params = params.group(1)
         else:
-            params = ''
+            params = ""
 
         output = []
         for df in self.data:
             if len(params) > 0:
-                method = method.replace(params, '').replace('()', '')
+                method = method.replace(params, "").replace("()", "")
                 try:
                     params = ast.literal_eval(params)
                 except SyntaxError:
@@ -69,6 +79,7 @@ class Srs(UserList):
     """
     This class **separates** the columns with the same name into individual series.
     """
+
     def __init__(self, srs: dd.DataFrame, agg: bool = False) -> None:
         if agg:
             self.data = srs
@@ -88,7 +99,7 @@ class Srs(UserList):
         """
         Apply the same method for all elements in the list.
         """
-        params = re.search(r'\((.*?)\)', method)
+        params = re.search(r"\((.*?)\)", method)
         if params:
             params = str(params.group(1))
         else:
@@ -97,9 +108,9 @@ class Srs(UserList):
         output = []
         for srs in self.data:
             if len(params) > 0:
-                method = method.replace(params, '').replace('()', '')
+                method = method.replace(params, "").replace("()", "")
                 if isinstance(params, str) and "=" not in params:
-                    output.append(getattr(srs, method)(eval(params))) # is it the only choice?
+                    output.append(getattr(srs, method)(eval(params)))  # is it the only choice?
                 else:
                     output.append(getattr(srs, method)(params))
             else:
@@ -116,7 +127,9 @@ class Srs(UserList):
 
         return output
 
-    def getmask(self, mask: Union[List[dd.Series], UserList], inverse: bool = False) -> List[dd.Series]:
+    def getmask(
+        self, mask: Union[List[dd.Series], UserList], inverse: bool = False
+    ) -> List[dd.Series]:
         """
         Return rows based on a boolean mask.
         """
@@ -136,7 +149,9 @@ class Srs(UserList):
         return [func(srs, **kwargs) for srs in self.data]
 
 
-def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Optional[Dict[str, Any]] = None) -> Intermediate:
+def compare_multiple_df(
+    df_list: List[dd.DataFrame], cfg: Optional[Dict[str, Any]] = None
+) -> Intermediate:
     """
     Compute function for plot_diff([df...])
 
@@ -147,7 +162,6 @@ def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Optional[Dict[str, Any
     """
     dfs = Dfs(df_list)
     candidate_rank_idx = _get_candidate(dfs)
-
 
     data: List[Any] = []
     aligned_dfs = dd.concat(df_list, axis=1, copy=False)
@@ -160,14 +174,14 @@ def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Optional[Dict[str, Any
         srs = Srs(aligned_dfs[col])
         col_dtype = srs.self_map(detect_dtype)
         if len(col_dtype) > 1:
-            col_dtype = col_dtype[candidate_rank_idx[1]] # use secondary for now
+            col_dtype = col_dtype[candidate_rank_idx[1]]  # use secondary for now
         else:
             col_dtype = col_dtype[0]
 
         if is_dtype(col_dtype, Continuous()) and cfg.hist.enable:
             data.append((col, Continuous(), _cont_calcs(srs.apply("dropna"), cfg)))
         elif is_dtype(col_dtype, Nominal()) and cfg.bar.enable:
-            if len(first_rows[col].shape) > 1: # exception for singular column
+            if len(first_rows[col].shape) > 1:  # exception for singular column
                 try:
                     first_rows[col].iloc[:, candidate_rank_idx[1]].apply(hash)
                 except TypeError:
@@ -193,15 +207,14 @@ def compare_multiple_df(df_list: List[dd.DataFrame], cfg: Optional[Dict[str, Any
                 plot_data.append((col, dtp, datum["hist"]))
         elif is_dtype(dtp, Nominal()):
             if cfg.bar.enable:
-                plot_data.append((col, dtp, (dask.compute(*datum["bar"].apply("to_frame")), datum["nuniq"])))
+                plot_data.append(
+                    (col, dtp, (dask.compute(*datum["bar"].apply("to_frame")), datum["nuniq"]))
+                )
         elif is_dtype(dtp, DateTime()):
             plot_data.append((col, dtp, datum))
 
     return Intermediate(
-        data = plot_data,
-        stats = stats,
-        target_cnt = len(df_list),
-        visual_type = "comparison_grid"
+        data=plot_data, stats=stats, target_cnt=len(df_list), visual_type="comparison_grid"
     )
 
 
@@ -244,9 +257,11 @@ def _cont_calcs(srs: Srs, cfg: Config) -> Dict[str, List[Any]]:
     srs = Srs(srs.getmask(mask, inverse=True), agg=True)
 
     # histogram
-    data["hist"] = srs.self_map(da.histogram, bins=cfg.hist.bins, range=(
-        min(dask.compute(*srs.apply("min"))), max(dask.compute(*srs.apply("max")))
-        ))
+    data["hist"] = srs.self_map(
+        da.histogram,
+        bins=cfg.hist.bins,
+        range=(min(dask.compute(*srs.apply("min"))), max(dask.compute(*srs.apply("max")))),
+    )
 
     return data
 
@@ -264,7 +279,9 @@ def _nom_calcs(srs: Srs, cfg: Config) -> Dict[str, List[Any]]:
     if cfg.bar.enable:
         # select the largest or smallest groups
         data["bar"] = (
-            grps.apply(f"nlargest({cfg.bar.bars})") if cfg.bar.sort_descending else grps.apply(f"nsmallest({cfg.bar.bars})")
+            grps.apply(f"nlargest({cfg.bar.bars})")
+            if cfg.bar.sort_descending
+            else grps.apply(f"nsmallest({cfg.bar.bars})")
         )
         data["nuniq"] = grps.shape.getidx(0)
 
@@ -275,7 +292,7 @@ def _get_candidate(dfs: Dfs) -> List[int]:
     """
     The the index of major df from the candidates to determine the base for calculation.
     """
-    dfs = dfs.apply('dropna')
+    dfs = dfs.apply("dropna")
     candidates = []
 
     dim = dfs.shape
@@ -285,20 +302,22 @@ def _get_candidate(dfs: Dfs) -> List[int]:
     candidates.append(major_candidate.index(max(major_candidate)))
     candidates.append(secondary_candidate.index(max(secondary_candidate)))
 
-    #todo: there might be a better way to do this
+    # todo: there might be a better way to do this
     return candidates
 
 
 if __name__ == "__main__":
-    df1 = pd.read_csv("https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv")
+    df1 = pd.read_csv(
+        "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
+    )
     df2 = df1.copy()
 
-    df2['Age'] = df1['Age'] + 10
-    df2['Extra'] = df1['Sex']
+    df2["Age"] = df1["Age"] + 10
+    df2["Extra"] = df1["Sex"]
     df3 = df1.iloc[:800, :]
     df = [df1, df2, df3]
 
     from dataprep.eda.utils import to_dask
 
     itmdt = compare_multiple_df(list(map(to_dask, df)), cfg=Config())
-    print('EOF')
+    print("EOF")

@@ -10,11 +10,12 @@ from .singular import *
 
 __all__ = ["compute"]
 
+
 def compute(
     df: Union[List[Union[pd.DataFrame, dd.DataFrame]], Union[pd.DataFrame, dd.DataFrame]],
     x: Optional[str] = None,
     window: Optional[List[str]] = None,
-    cfg: Optional[Dict[str, Any]] = None
+    cfg: Optional[Dict[str, Any]] = None,
 ) -> Intermediate:
     """
     blablabla
