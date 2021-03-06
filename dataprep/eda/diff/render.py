@@ -297,7 +297,7 @@ def bar_viz(
     )
     fig.vbar(
         x="x_ticks",
-        width=0.8,
+        line_width=0.2,
         top="count",
         bottom=0.01,
         source=data,
@@ -368,16 +368,12 @@ def hist_viz(
             alpha=0.5,
             top="freq",
             fill_color=CATEGORY10[i],
-            legend_label=df_labels[i],
         )
-        hover = HoverTool(tooltips=tooltips, mode="vline")
-        fig.add_tools(hover)
+    hover = HoverTool(tooltips=tooltips, attachment='vertical', mode="vline")
+    fig.add_tools(hover)
 
     tweak_figure(fig, "hist", show_yticks)
     fig.yaxis.axis_label = "Frequency"
-    fig.legend.location = "top_center"
-    fig.legend.click_policy = "hide"
-    fig.legend.orientation = "horizontal"
     _format_axis(fig, df.iloc[0]["left"], df.iloc[-1]["right"], "x")
 
     if show_yticks:

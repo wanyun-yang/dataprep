@@ -1619,6 +1619,7 @@ def nom_insights(data: Dict[str, Any], col: str, cfg: Config) -> Dict[str, List[
     if cfg.bar.enable:
         if data["chisq"][1] > cfg.insight.uniform__threshold:
             ins["Bar Chart"].append(f"{col} is relatively evenly distributed")
+        print(col)
         factor = round(data["bar"][0] / data["bar"][1], 2) if len(data["bar"]) > 1 else 0
         if factor > cfg.insight.outstanding_no1__threshold:
             val1, val2 = data["bar"].index[0], data["bar"].index[1]

@@ -4,11 +4,11 @@
         -webkit-font-smoothing: antialiased;
         display: flex;
         flex-wrap: wrap;
-        width: {{ context.container_width }}px;
+        max-width: {{ context.container_width }}px;
     }
 
     .fig-{{ context.rnd }} {
-        flex: 0 1 30%;
+        flex: 1 1 30%;
         margin-top: 10px;
         background: white;
     }
@@ -161,6 +161,7 @@
         text-align: center;
         text-decoration: none;
         font-size: 15px;
+        width: 100%;
     }
 
     .toggle-label-{{ context.rnd }}:hover {
@@ -193,21 +194,15 @@
 
     .tabledata-{{ context.rnd }} {
         flex: 1 1 50%;
-<!--        max-width: 477px;-->
     }
 
     .tabledata-{{ context.rnd }} h3 {
         text-align: center;
     }
 
-    .tabledata-{{ context.rnd }} th {
+    .tabledata-{{ context.rnd }} th, .tabledata-{{ context.rnd }} td {
         text-align: left;
     }
-
-    .tabledata-{{ context.rnd }} td {
-        text-align: left;
-    }
-
     .insights-{{ context.rnd }} {
         flex: 1 1 50%;
         text-align: center;
@@ -417,7 +412,7 @@
     }
 
     .top-info-{{ context.rnd }} {
-        width: 972px;
+        max-width: 972px;
     }
 
     .comparison-stats-{{ context.rnd }} {
@@ -428,17 +423,13 @@
         text-align: center;
     }
 
-    .comparison-stats-{{ context.rnd }} table {
-        text-align: left;
-    }
-
-    .comparison-stats-{{ context.rnd }} tr {
+    .comparison-stats-{{ context.rnd }} table, .comparison-stats-{{ context.rnd }} tr {
         text-align: left;
     }
 
     .comparison-stats-{{ context.rnd }} th {
         text-align: right;
-        width: 300px;
+        max-width: 90px;
     }
 
     #comp-label-{{ context.rnd }} td {
