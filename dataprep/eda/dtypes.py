@@ -168,7 +168,9 @@ def detect_without_known(col: dd.Series) -> DType:
     """
     This function detects dtypes of column when users didn't specify.
     """
-    if is_nominal(col.dtype):
+
+    nuniques = col.nunique_approx().compute()
+    if is_nominal(col.dtype) or nuniques < 10:
         return Nominal()
 
     elif is_continuous(col.dtype):
