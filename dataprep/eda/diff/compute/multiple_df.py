@@ -9,6 +9,8 @@ import dask.array as da
 import dask.dataframe as dd
 from collections import UserList
 from typing import Any, Callable, Dict, List, Tuple, Union, Optional
+from .common import DTMAP, _get_timeunit
+from ...dtypes import drop_null
 from ...intermediate import Intermediate
 from ...dtypes import (
     DType,
@@ -65,7 +67,7 @@ class Dfs(UserList):
                 output.append(getattr(df, method)())
         return Dfs(output)
 
-    def getidx(self, ind: str) -> List[Any]:
+    def getidx(self, ind: Union[str, int]) -> List[Any]:
         """
         Get the specified index for all elements in the list.
         """
@@ -74,13 +76,19 @@ class Dfs(UserList):
             output.append(data[ind])
         return output
 
+    def self_map(self, func: Callable[[dd.Series], Any], **kwargs: Any) -> List[Any]:
+        """
+        Map the data to the given function.
+        """
+        return [func(df, **kwargs) for df in self.data]
+
 
 class Srs(UserList):
     """
     This class **separates** the columns with the same name into individual series.
     """
 
-    def __init__(self, srs: dd.DataFrame, agg: bool = False) -> None:
+    def __init__(self, srs: Union[dd.DataFrame, List[Any]], agg: bool = False) -> None:
         if agg:
             self.data = srs
         else:
@@ -117,7 +125,7 @@ class Srs(UserList):
                 output.append(getattr(srs, method)())
         return Srs(output, agg=True)
 
-    def getidx(self, ind: str) -> List[Any]:
+    def getidx(self, ind: Union[str, int]) -> List[Any]:
         """
         Get the specified index for all elements in the list.
         """
@@ -193,8 +201,7 @@ def compare_multiple_df(
                     srs = srs.apply("dropna").apply("astype(str)")
             data.append((col, Nominal(), _nom_calcs(srs.apply("dropna"), cfg)))
         elif is_dtype(col_dtype, DateTime()) and cfg.line.enable:
-            # data.append((col, DateTime(), dask.delayed(_calc_line_dt)(df[[col]], cfg.line.unit)))
-            pass
+            data.append((col, DateTime(), dask.delayed(_calc_line_dt)(srs, col, cfg.line.unit)))
 
     stats = calc_stats(dfs, cfg)
     data = [dask.compute(*i) for i in data]
@@ -208,10 +215,10 @@ def compare_multiple_df(
         elif is_dtype(dtp, Nominal()):
             if cfg.bar.enable:
                 plot_data.append(
-                    (col, dtp, (dask.compute(*datum["bar"].apply("to_frame")), datum["nuniq"]))
+                    (col, dtp, (dask.compute(*datum["bar"].apply("to_frame")), len(aligned_dfs)))
                 )
         elif is_dtype(dtp, DateTime()):
-            plot_data.append((col, dtp, datum))
+            plot_data.append((col, dtp, dask.compute(*datum[0])))
 
     return Intermediate(
         data=plot_data, stats=stats, target_cnt=len(df_list), visual_type="comparison_grid"
@@ -286,6 +293,45 @@ def _nom_calcs(srs: Srs, cfg: Config) -> Dict[str, List[Any]]:
         data["nuniq"] = grps.shape.getidx(0)
 
     return data
+
+
+def _calc_line_dt(
+    srs: Srs,
+    x: str,
+    unit: str
+) -> Tuple[List[pd.DataFrame], Dict[str, int]]:
+    """
+    Calculate a line or multiline chart with date on the x axis. If df contains
+    one datetime column, it will make a line chart of the frequency of values.
+
+    Parameters
+    ----------
+    df
+        A dataframe
+    x
+        The column name
+    unit
+        The unit of time over which to group the values
+    """
+    # pylint: disable=too-many-locals
+    unit = _get_timeunit(min(dask.compute(*srs.apply("min"))), min(dask.compute(*srs.apply("max"))), 100) if unit == "auto" else unit
+    dfs = Dfs(srs.apply('to_frame').self_map(drop_null))
+    if unit not in DTMAP.keys():
+        raise ValueError
+    grouper = pd.Grouper(key=x, freq=DTMAP[unit][0])  # for grouping the time values
+    # miss_pct = round(df[x].isna().sum() / len(df) * 100, 1)
+    for i in range(len(dfs)): # Dfs can't handle callable params
+        dfs[i] = dfs[i].groupby(grouper)
+    dfr = dfs.apply('size').apply('reset_index')
+
+    for df in dfr:
+        df.columns = [x, "freq"]
+        df["pct"] = df["freq"] / len(df) * 100
+
+        df[x] = df[x] - pd.to_timedelta(6, unit="d") if unit == "week" else df[x]
+        df["lbl"] = df[x].dt.to_period("S").dt.strftime(DTMAP[unit][1])
+
+    return (dfr, DTMAP[unit][3])
 
 
 def _get_candidate(dfs: Dfs) -> List[int]:
