@@ -23,7 +23,7 @@ from bokeh.models import (
     PrintfTickFormatter,
 )
 from bokeh.plotting import Figure, figure
-from bokeh.transform import cumsum, factor_cmap, linear_cmap, transform
+from bokeh.transform import cumsum, dodge, factor_cmap, linear_cmap, transform
 from bokeh.util.hex import hexbin
 from pandas.core import base
 from scipy.stats import norm
@@ -221,29 +221,25 @@ def _format_values(key: str, value: List[Any]) -> List[str]:
 
 
 def _align_cols(
-    col: str, target_cnt: int, df_list: List[pd.DataFrame], ttl_grps: List[int]
-) -> Tuple[List[pd.DataFrame], List[int]]:
+    col: str, target_cnt: int, base_cnt: int, union_df: pd.DataFrame
+) -> pd.DataFrame:
     """
-    To make the comparison clearer, we use 0 to fill the non-existing columns and their
-    corresponding data from computation
+    To make the comparison clearer, use 0 to fill the non-existing columns
     """
-
-    base_cnt = len(df_list)
 
     if base_cnt < target_cnt:
         diff = target_cnt - base_cnt
-        zero_clone = df_list[0].copy()
+        zero_clone = union_df.iloc[:, 0].to_frame().copy()
         zero_clone[col] = 0
         for _ in range(diff):
-            df_list.append(zero_clone)
-            ttl_grps.append(ttl_grps[0])
+            union_df.append(zero_clone)
 
-    return df_list, ttl_grps
+    return union_df
 
 
 def bar_viz(
     df: List[pd.DataFrame],
-    ttl_grps: List[int],
+    ttl_grps: int,
     nrows: List[int],
     col: str,
     yscale: str,
@@ -258,33 +254,16 @@ def bar_viz(
     """
     # pylint: disable=too-many-arguments
 
-    df, ttl_grps = _align_cols(col, target_cnt, df, ttl_grps)
-    df = pd.concat(df, axis=1, copy=False, ignore_index=True).fillna(0)
-    df.columns = df_labels
-    for i in range(target_cnt):
-        df[f"pct{i}"] = df[df_labels[i]] / nrows[i] * 100
-    df.index = [str(val) for val in df.index]
-
     tooltips = [
-        (col, "@col_name"),
-        ("Count", "@count"),
+        (col, "@index"),
+        ("Count", f"@{{{col}}}"),
         ("Percent", "@pct{0.2f}%"),
-        ("Source", "@orig"),
+        ("Source", "@from"),
     ]
 
     if show_yticks:
         if len(df) > 10:
             plot_width = 28 * len(df)
-
-    x_ticks = [(ind, df_label) for ind in df.index for df_label in df_labels]
-    count = sum(zip(*[df[df_labels[i]] for i in range(target_cnt)]), ())
-    col_name = sum(zip(*[df.index for _ in range(target_cnt)]), ())
-    pct = sum(zip(*[df[f"pct{i}"] for i in range(target_cnt)]), ())
-    orig = sum([df_labels for _ in range(len(df.index))], [])
-    data = ColumnDataSource(
-        data=dict(x_ticks=x_ticks, count=count, col_name=col_name, pct=pct, orig=orig)
-    )
-
     fig = Figure(
         plot_width=plot_width,
         plot_height=plot_height,
@@ -292,25 +271,31 @@ def bar_viz(
         toolbar_location=None,
         tooltips=tooltips,
         tools="hover",
-        x_range=FactorRange(*x_ticks),
+        x_range=list(df[0].index), #todo: not 0 index, but the major one
         y_axis_type=yscale,
     )
-    fig.vbar(
-        x="x_ticks",
-        line_width=0.2,
-        top="count",
-        bottom=0.01,
-        source=data,
-        fill_color=factor_cmap("x_ticks", palette=CATEGORY10, factors=df_labels, start=1, end=2),
-    )
+
+    for i, (nrow, data) in enumerate(zip(nrows, df)):
+        data["pct"] = data[col] / nrow * 100
+        data.index = [str(val) for val in data.index]
+        data["from"] = df_labels[i]
+
+        fig.vbar(
+            x=dodge('index', i*0.1, range=fig.x_range), #todo: auto arrange bar dodge
+            width=0.2,
+            top=col,
+            bottom=0.01,
+            source=data,
+            fill_color=CATEGORY10[i]
+        )
     tweak_figure(fig, "bar", show_yticks)
     fig.yaxis.axis_label = "Count"
-    if ttl_grps[0] > len(df):
-        fig.xaxis.axis_label = f"Top {len(df)} of {ttl_grps[0]} {col}"
+    if ttl_grps > len(df[0]): #todo: not 0 index, but the major one
+        fig.xaxis.axis_label = f"Top {len(df[0])} of {ttl_grps} {col}" #todo: not 0 index, but the major one
         fig.xaxis.axis_label_standoff = 0
 
     if show_yticks and yscale == "linear":
-        _format_axis(fig, 0, df.max().max(), "y")
+        _format_axis(fig, 0, df[0].max(), "y") #todo: not 0 index, but the major one
     return fig
 
 
@@ -384,6 +369,67 @@ def hist_viz(
     return fig
 
 
+def dt_line_viz(
+    df: List[pd.DataFrame],
+    x: str,
+    timeunit: str,
+    yscale: str,
+    plot_width: int,
+    plot_height: int,
+    show_yticks: bool,
+    df_labels: List[str],
+    y: Optional[str] = None,
+) -> Figure:
+    """
+    Render a line chart
+    """
+    # pylint: disable=too-many-arguments
+    # df[0] always exist, because the datetime results are quite special
+    title = title = f"{df[0].columns[1]} of {y} by {x}"
+    agg = f"{df[0].columns[1]}"
+    tooltips = [(timeunit, "@lbl"), (agg, f"@{df[0].columns[1]}"), ("Source", "@orig")]
+    for i, _ in enumerate(df):
+        df[i]['orig'] = df_labels[i]
+
+    fig = Figure(
+        plot_width=plot_width,
+        plot_height=plot_height,
+        toolbar_location=None,
+        title=title,
+        tools=[],
+        y_axis_type=yscale,
+        x_axis_type="datetime",
+    )
+
+    for i, _ in enumerate(df):
+        fig.line(
+            source=df[i],
+            x=x,
+            y=agg,
+            line_width=2,
+            line_alpha=0.8,
+            color=CATEGORY10[i],
+        )
+    hover = HoverTool(
+        tooltips=tooltips,
+        mode="vline",
+    )
+    fig.add_tools(hover)
+
+    tweak_figure(fig, "line", show_yticks)
+    if show_yticks and yscale == "linear":
+        _format_axis(fig, 0, max([d[agg].max() for d in df]), "y")
+
+    if y:
+        fig.yaxis.axis_label = f"{df[0].columns[1]} of {y}"
+        fig.xaxis.axis_label = x
+        return Panel(child=fig, title="Line Chart")
+
+    fig.yaxis.axis_label = "Frequency"
+    return fig
+
+
+
 def format_ov_stats(stats: Dict[str, List[Any]]) -> Tuple[Dict[str, str], Dict[str, Any]]:
     """
     Render statistics information for distribution grid
@@ -437,11 +483,10 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
                 data, nrows, col, cfg.hist.yscale, plot_width, plot_height, False, df_labels
             )
         elif is_dtype(dtp, DateTime()):
-            # df, timeunit, miss_pct = data
-            # fig = dt_line_viz(
-            #     df, col, timeunit, cfg.line.yscale, plot_width, plot_height, False, miss_pct
-            # )
-            continue
+            df, timeunit = data
+            fig = dt_line_viz(
+                list(df), col, timeunit, cfg.line.yscale, plot_width, plot_height, False, df_labels
+            )
         fig.frame_height = plot_height
         titles.append(fig.title.text)
         fig.title.text = ""
@@ -459,6 +504,7 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
         "container_width": plot_width * 3,
         "toggle_content": toggle_content,
         "df_labels": cfg.diff.label,
+        "df_colors": CATEGORY10[:cfg.diff.label]
     }
 
 

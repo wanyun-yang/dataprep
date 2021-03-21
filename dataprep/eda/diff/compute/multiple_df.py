@@ -202,7 +202,6 @@ def compare_multiple_df(
             data.append((col, Nominal(), _nom_calcs(srs.apply("dropna"), cfg)))
         elif is_dtype(col_dtype, DateTime()) and cfg.line.enable:
             data.append((col, DateTime(), dask.delayed(_calc_line_dt)(srs, col, cfg.line.unit)))
-
     stats = calc_stats(dfs, cfg)
     data = [dask.compute(*i) for i in data]
     stats = {k: list(dask.compute(*v)) for k, v in stats.items()}
@@ -218,7 +217,7 @@ def compare_multiple_df(
                     (col, dtp, (dask.compute(*datum["bar"].apply("to_frame")), len(aligned_dfs)))
                 )
         elif is_dtype(dtp, DateTime()):
-            plot_data.append((col, dtp, dask.compute(*datum[0])))
+            plot_data.append((col, dtp, (dask.compute(*datum[0]), datum[1]))) # workaround
 
     return Intermediate(
         data=plot_data, stats=stats, target_cnt=len(df_list), visual_type="comparison_grid"
