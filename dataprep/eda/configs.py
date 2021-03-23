@@ -79,6 +79,7 @@ class Diff(BaseModel):
     """
 
     label: Union[List[str], None] = None
+    baseline: int = 0
 
 
 class Stats(BaseModel):
@@ -220,7 +221,7 @@ class Bar(BaseModel):
     """
 
     enable: bool = True
-    bars: int = 5
+    bars: int = 10
     sort_descending: bool = True
     yscale: str = "linear"
     color: str = "#1f77b4"

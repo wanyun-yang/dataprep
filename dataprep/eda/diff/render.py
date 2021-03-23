@@ -220,23 +220,6 @@ def _format_values(key: str, value: List[Any]) -> List[str]:
     return value
 
 
-def _align_cols(
-    col: str, target_cnt: int, base_cnt: int, union_df: pd.DataFrame
-) -> pd.DataFrame:
-    """
-    To make the comparison clearer, use 0 to fill the non-existing columns
-    """
-
-    if base_cnt < target_cnt:
-        diff = target_cnt - base_cnt
-        zero_clone = union_df.iloc[:, 0].to_frame().copy()
-        zero_clone[col] = 0
-        for _ in range(diff):
-            union_df.append(zero_clone)
-
-    return union_df
-
-
 def bar_viz(
     df: List[pd.DataFrame],
     ttl_grps: int,
@@ -246,8 +229,8 @@ def bar_viz(
     plot_width: int,
     plot_height: int,
     show_yticks: bool,
-    target_cnt: int,
     df_labels: List[str],
+    baseline: int
 ) -> Figure:
     """
     Render a bar chart
@@ -262,8 +245,8 @@ def bar_viz(
     ]
 
     if show_yticks:
-        if len(df) > 10:
-            plot_width = 28 * len(df)
+        if len(df[baseline]) > 10:
+            plot_width = 28 * len(df[baseline])
     fig = Figure(
         plot_width=plot_width,
         plot_height=plot_height,
@@ -271,7 +254,7 @@ def bar_viz(
         toolbar_location=None,
         tooltips=tooltips,
         tools="hover",
-        x_range=list(df[0].index), #todo: not 0 index, but the major one
+        x_range=list(df[baseline].index),
         y_axis_type=yscale,
     )
 
@@ -290,12 +273,12 @@ def bar_viz(
         )
     tweak_figure(fig, "bar", show_yticks)
     fig.yaxis.axis_label = "Count"
-    if ttl_grps > len(df[0]): #todo: not 0 index, but the major one
-        fig.xaxis.axis_label = f"Top {len(df[0])} of {ttl_grps} {col}" #todo: not 0 index, but the major one
+    if ttl_grps > len(df[baseline]):
+        fig.xaxis.axis_label = f"Top {len(df[baseline])} of {ttl_grps} {col}"
         fig.xaxis.axis_label_standoff = 0
 
     if show_yticks and yscale == "linear":
-        _format_axis(fig, 0, df[0].max(), "y") #todo: not 0 index, but the major one
+        _format_axis(fig, 0, df[baseline].max(), "y")
     return fig
 
 
@@ -458,10 +441,11 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
     # pylint: disable=too-many-locals
     plot_width = cfg.plot.width if cfg.plot.width is not None else 324
     plot_height = cfg.plot.height if cfg.plot.height is not None else 300
-    df_labels = cfg.diff.label
+    df_labels: List[str] = cfg.diff.label
+    baseline: int = cfg.diff.baseline
+
     figs: List[Figure] = []
     nrows = itmdt["stats"]["nrows"]
-    target_cnt = itmdt["target_cnt"]
     titles: List[str] = []
     for col, dtp, data in itmdt["data"]:
         if is_dtype(dtp, Nominal()):
@@ -475,8 +459,8 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
                 plot_width,
                 plot_height,
                 False,
-                target_cnt,
                 df_labels,
+                baseline if len(df) > 1 else 0
             )
         elif is_dtype(dtp, Continuous()):
             fig = hist_viz(
@@ -504,7 +488,7 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
         "container_width": plot_width * 3,
         "toggle_content": toggle_content,
         "df_labels": cfg.diff.label,
-        "df_colors": CATEGORY10[:cfg.diff.label]
+        "df_colors": CATEGORY10[:len(cfg.diff.label)]
     }
 
 

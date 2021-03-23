@@ -1,5 +1,6 @@
 # type: ignore
 """Computations for plot_diff([df1, df2, ..., dfn])."""
+from operator import index
 import re
 import ast
 import pandas as pd
@@ -9,8 +10,9 @@ import dask.array as da
 import dask.dataframe as dd
 from collections import UserList
 from typing import Any, Callable, Dict, List, Tuple, Union, Optional
+
+from pandas.core import base
 from .common import DTMAP, _get_timeunit
-from ...dtypes import drop_null
 from ...intermediate import Intermediate
 from ...dtypes import (
     DType,
@@ -20,13 +22,15 @@ from ...dtypes import (
     detect_dtype,
     get_dtype_cnts_and_num_cols,
     is_dtype,
+    drop_null
 )
 from ....errors import UnreachableError
 from ...configs import Config
 
+# from dataprep.eda.diff.compute.common import DTMAP, _get_timeunit
 # from dataprep.eda.configs import Config
 # from dataprep.eda.intermediate import Intermediate
-# from dataprep.eda.dtypes import DType, Nominal, Continuous, DateTime, detect_dtype, get_dtype_cnts_and_num_cols, is_dtype
+# from dataprep.eda.dtypes import DType, Nominal, Continuous, DateTime, detect_dtype, get_dtype_cnts_and_num_cols, is_dtype, drop_null
 # from dataprep.errors import UnreachableError
 
 
@@ -169,7 +173,7 @@ def compare_multiple_df(
         Dataframe sequence to be compared.
     """
     dfs = Dfs(df_list)
-    candidate_rank_idx = _get_candidate(dfs)
+    baseline: int = cfg.diff.baseline
 
     data: List[Any] = []
     aligned_dfs = dd.concat(df_list, axis=1, copy=False)
@@ -182,7 +186,7 @@ def compare_multiple_df(
         srs = Srs(aligned_dfs[col])
         col_dtype = srs.self_map(detect_dtype)
         if len(col_dtype) > 1:
-            col_dtype = col_dtype[candidate_rank_idx[1]]  # use secondary for now
+            col_dtype = col_dtype[baseline]
         else:
             col_dtype = col_dtype[0]
 
@@ -191,7 +195,7 @@ def compare_multiple_df(
         elif is_dtype(col_dtype, Nominal()) and cfg.bar.enable:
             if len(first_rows[col].shape) > 1:  # exception for singular column
                 try:
-                    first_rows[col].iloc[:, candidate_rank_idx[1]].apply(hash)
+                    first_rows[col].iloc[:, baseline].apply(hash)
                 except TypeError:
                     srs = srs.apply("dropna").apply("astype(str)")
             else:
@@ -214,13 +218,12 @@ def compare_multiple_df(
         elif is_dtype(dtp, Nominal()):
             if cfg.bar.enable:
                 plot_data.append(
-                    (col, dtp, (dask.compute(*datum["bar"].apply("to_frame")), len(aligned_dfs)))
+                    (col, dtp, (dask.compute(*datum["bar"]), len(aligned_dfs)))
                 )
         elif is_dtype(dtp, DateTime()):
             plot_data.append((col, dtp, (dask.compute(*datum[0]), datum[1]))) # workaround
-
     return Intermediate(
-        data=plot_data, stats=stats, target_cnt=len(df_list), visual_type="comparison_grid"
+        data=plot_data, stats=stats, visual_type="comparison_grid"
     )
 
 
@@ -278,19 +281,34 @@ def _nom_calcs(srs: Srs, cfg: Config) -> Dict[str, List[Any]]:
     """
     # dictionary of data for the bar chart and related insights
     data: Dict[str, List[Any]] = {}
+    data["bar"] = []
+    baseline: int = cfg.diff.baseline
 
     # value counts for barchart and uniformity insight
-    grps = srs.apply("value_counts(sort=False)")
 
     if cfg.bar.enable:
-        # select the largest or smallest groups
-        data["bar"] = (
-            grps.apply(f"nlargest({cfg.bar.bars})")
-            if cfg.bar.sort_descending
-            else grps.apply(f"nsmallest({cfg.bar.bars})")
-        )
-        data["nuniq"] = grps.shape.getidx(0)
+        if len(srs) > 1:
+            grps = srs.apply("value_counts(sort=False)")
+            # select the largest or smallest groups
+            ngrp = grps[baseline].nlargest(cfg.bar.bars) if cfg.bar.sort_descending else grps[baseline].nsmallest(cfg.bar.bars)
 
+            # pick data using indices from the baseline
+            for i, grp in enumerate(grps):
+                # if baseline has indices which are not in others
+                if i != baseline:
+                    tmp_srs = pd.Series(name=ngrp.name, dtype=int)
+                    for tar_idx in ngrp.index:
+                        try:
+                            tmp_srs.loc[tar_idx] = dask.compute(*grp.loc[tar_idx])[0]
+                        except: # bug?: can't intercept KeyError so we catch all errors
+                            tmp_srs.loc[tar_idx] = 0
+
+                    data["bar"].append(tmp_srs.to_frame())
+            data["bar"].insert(baseline, ngrp.to_frame())
+        else: # singular column
+            grps = srs.apply("value_counts(sort=False)")[0]
+            ngrp = grps.nlargest(cfg.bar.bars) if cfg.bar.sort_descending else grps.nsmallest(cfg.bar.bars)
+            data["bar"].append(ngrp.to_frame())
     return data
 
 
@@ -331,25 +349,6 @@ def _calc_line_dt(
         df["lbl"] = df[x].dt.to_period("S").dt.strftime(DTMAP[unit][1])
 
     return (dfr, DTMAP[unit][3])
-
-
-def _get_candidate(dfs: Dfs) -> List[int]:
-    """
-    The the index of major df from the candidates to determine the base for calculation.
-    """
-    dfs = dfs.apply("dropna")
-    candidates = []
-
-    dim = dfs.shape
-    major_candidate = dask.compute(dim.getidx(0))[0]
-    secondary_candidate = dim.getidx(1)
-
-    candidates.append(major_candidate.index(max(major_candidate)))
-    candidates.append(secondary_candidate.index(max(secondary_candidate)))
-
-    # todo: there might be a better way to do this
-    return candidates
-
 
 if __name__ == "__main__":
     df1 = pd.read_csv(

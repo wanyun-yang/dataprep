@@ -31,6 +31,9 @@ def compute(
         elif len(df) != len(label):
             raise ValueError("Number of the given label doesn't match the number of DataFrames.")
 
+        if cfg.diff.baseline > len(df) - 1:
+            raise ValueError("Baseline index is larger than the input length.")
+
         df_list = list(map(to_dask, df))
         if x:
             # return compare_multiple_on_column(df_list, x)
