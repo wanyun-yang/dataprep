@@ -78,29 +78,6 @@ def tweak_figure(
         fig.xaxis.major_tick_line_color = None
 
 
-def _make_title(grp_cnt_stats: Dict[str, int], x: str, y: str) -> str:
-    """
-    Format the title to notify the user of sampled output
-    """
-    x_ttl, y_ttl = None, None
-    if f"{x}_ttl" in grp_cnt_stats:
-        x_ttl = grp_cnt_stats[f"{x}_ttl"]
-        x_shw = grp_cnt_stats[f"{x}_shw"]
-    if f"{y}_ttl" in grp_cnt_stats:
-        y_ttl = grp_cnt_stats[f"{y}_ttl"]
-        y_shw = grp_cnt_stats[f"{y}_shw"]
-    if x_ttl and y_ttl:
-        if x_ttl > x_shw and y_ttl > y_shw:
-            return f"(top {y_shw} out of {y_ttl}) {y} by (top {x_shw} out of {x_ttl}) {x}"
-    elif x_ttl:
-        if x_ttl > x_shw:
-            return f"{y} by (top {x_shw} out of {x_ttl}) {x}"
-    elif y_ttl:
-        if y_ttl > y_shw:
-            return f"(top {y_shw} out of {y_ttl}) {y} by {x}"
-    return f"{y} by {x}"
-
-
 def _format_ticks(ticks: List[float]) -> List[str]:
     """
     Format the tick values
@@ -258,14 +235,15 @@ def bar_viz(
         y_axis_type=yscale,
     )
 
+    offset = np.linspace(-0.08 * len(df), 0.08 * len(df), len(df)) if len(df) > 1 else [0]
     for i, (nrow, data) in enumerate(zip(nrows, df)):
         data["pct"] = data[col] / nrow * 100
         data.index = [str(val) for val in data.index]
         data["from"] = df_labels[i]
 
         fig.vbar(
-            x=dodge('index', i*0.1, range=fig.x_range), #todo: auto arrange bar dodge
-            width=0.2,
+            x=dodge('index', offset[i], range=fig.x_range), #todo: auto arrange bar dodge
+            width=0.6/len(df),
             top=col,
             bottom=0.01,
             source=data,
@@ -311,8 +289,8 @@ def hist_viz(
         y_axis_type=yscale,
     )
 
-    for i in range(len(hist)):
-        counts, bins = hist[i]
+    for i, hst in enumerate(hist):
+        counts, bins = hst
         if sum(counts) == 0:
             fig.rect(x=0, y=0, width=0, height=0)
             continue
@@ -333,7 +311,7 @@ def hist_viz(
             left="left",
             right="right",
             bottom=bottom,
-            alpha=0.5,
+            alpha=0.3,
             top="freq",
             fill_color=CATEGORY10[i],
         )
