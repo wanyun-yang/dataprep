@@ -466,7 +466,9 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
         "container_width": plot_width * 3,
         "toggle_content": toggle_content,
         "df_labels": cfg.diff.label,
-        "df_colors": CATEGORY10[:len(cfg.diff.label)]
+        "legend_labels": [
+            {"label": label, "color": color} for label, color in zip(cfg.diff.label, CATEGORY10[:len(cfg.diff.label)])
+        ],
     }
 
 

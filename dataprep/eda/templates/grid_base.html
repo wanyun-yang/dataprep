@@ -83,7 +83,7 @@
                         {% for entry in content %}
                         {% for ins_type, insight in entry.items() %}
                         <tr>
-                            <th id="des-{{ context.rnd }}">
+                            <th class="des-{{ context.rnd }}">
                                 {{ insight.replace('/*', '<span class="col-name-' + context.rnd | string() + '">').replace('*/', '</span>') }}
                             </th>
                             <td><span class="ins-type-{{ context.rnd }}">{{ ins_type }}</span></td>
@@ -124,12 +124,14 @@
         <div class="fig-{{ context.rnd }}">
             {% if context.meta %}
             <div class="menu-{{ context.rnd }}">
-                <div class="plot-title-{{ context.rnd }}">{{ context.meta[loop.index0] }}</div>
+                <div class="plot-title-{{ context.rnd }}">
+                    <h4>{{ context.meta[loop.index0] }}</h4>
+                </div>
                 {% if context.how_to_guide[context.meta[loop.index0]] %}
-                <div class="insight-container-{{ context.rnd }}">
+                <div class="info-container-{{ context.rnd }}">
                     <input type='checkbox' style='display: none' id="htgbt-{{ context.rnd }}-{{ loop.index0 }}" class="insight-check-{{ context.rnd }}">
                     <label class="htg-btn-{{ context.rnd }}" for="htgbt-{{ context.rnd }}-{{ loop.index0 }}"></label>
-                    <div class="insight-panel-{{ context.rnd }}" style="padding:20px;">
+                    <div class="insight-panel-{{ context.rnd }}">
                         {% for desc in context.how_to_guide[context.meta[loop.index0]] %}
                         <div class="htg-entry-{{ context.rnd }}">
                             <div class="htg-entry-conf-{{ context.rnd }}">{{ desc[0] }}</div>
@@ -141,17 +143,19 @@
                 </div>
                 {% endif %}
                 {% if context.column_insights[context.meta[loop.index0]] %}
-                <input type='checkbox' style='display: none' id="ib-{{ context.rnd }}-{{ loop.index0 }}" class="insight-check-{{ context.rnd }}">
-                <label class="insight-btn-{{ context.rnd }}" for="ib-{{ context.rnd }}-{{ loop.index0 }}"></label>
-                <div class="insight-panel-{{ context.rnd }}">
-                    <h4>Column Insights</h3>
-                        <ol>
-                            {% for insight in context.column_insights[context.meta[loop.index0]] %}
-                            <li class="entry-{{ context.rnd }}">
-                                {{ insight.replace('/*', '<span class="col-name-' + context.rnd | string() + '">').replace('*/', '</span>') }}
-                            </li>
-                            {% endfor %}
-                        </ol>
+                <div class="info-container-{{ context.rnd }}">
+                    <input type='checkbox' style='display: none' id="ib-{{ context.rnd }}-{{ loop.index0 }}" class="insight-check-{{ context.rnd }}">
+                    <label class="insight-btn-{{ context.rnd }}" for="ib-{{ context.rnd }}-{{ loop.index0 }}"></label>
+                    <div class="insight-panel-{{ context.rnd }}">
+                        <h4>Column Insights</h4>
+                            <ol>
+                                {% for insight in context.column_insights[context.meta[loop.index0]] %}
+                                <li class="entry-{{ context.rnd }}">
+                                    {{ insight.replace('/*', '<span class="col-name-' + context.rnd | string() + '">').replace('*/', '</span>') }}
+                                </li>
+                                {% endfor %}
+                            </ol>
+                    </div>
                 </div>
                 {% endif %}
             </div>

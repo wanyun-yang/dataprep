@@ -29,16 +29,6 @@
         cursor: none;
     }
 
-    .expandable-{{ context.rnd }}:hover .insight-pre-{{ context.rnd }} {
-        max-width: 0;
-        width: auto;
-    }
-
-    .expandable-{{ context.rnd }}:hover .plot-title-{{ context.rnd }} {
-        max-width: 100% !important;
-        width: auto;
-    }
-
     .insight-pre-{{ context.rnd }}>span{
         margin: 0 5px;
     }
@@ -51,14 +41,27 @@
     }
 
     .plot-title-{{ context.rnd }} {
+        display: inline-block;
+        width: 245px;
+        vertical-align: middle;
+        height: 25px;
+    }
+
+    .plot-title-{{ context.rnd }} > h4 {
         font-weight: 800;
         color: #828282;
-        display: inline-block;
-        width: 269px;
         text-overflow: ellipsis;
         overflow: hidden;
-        white-space: nowrap;
-        vertical-align: middle;
+        margin: 0;
+    }
+
+    .plot-title-{{ context.rnd }}:hover > h4{
+        overflow-wrap: break-word;
+        max-width: 240px;
+        z-index: 1;
+        position: absolute;
+        max-height: 300px;
+        background-color: white;
     }
 
     .insight-btn-{{ context.rnd }} {
@@ -73,7 +76,7 @@
         cursor: pointer;
         position: relative;
         left: 250px;
-        bottom: 2px;
+        bottom: 15px;
         margin: 0;
         z-index: 1;
     }
@@ -93,7 +96,7 @@
         background-color: #212121;
         transition: all .2s ease;
         position: relative;
-        top: 27px;
+        top: 10px;
         margin-top: -20px;
         border-radius: 5px;
         width: 98%;
@@ -178,10 +181,10 @@
     .stats-{{ context.rnd }} table {
         font-family: -apple-system, 'Helvetica Neue', 'Helvetica', 'Arial', 'Lucida Grande', sans-serif;
         -webkit-font-smoothing: antialiased;
-        border-collapse: collapse;
+        border-collapse: collapse !important;
         font-size: 12px;
-        table-layout: auto;
-        width: 100%;
+        table-layout: auto !important;
+        width: 100% !important;
     }
 
     .stats-{{ context.rnd }} table th {
@@ -238,6 +241,14 @@
         min-width: 82px;
     }
 
+    .des-{{ context.rnd }} span {
+        max-width: 85px;
+    }
+
+    .des-{{ context.rnd }} span:hover {
+        position: absolute;
+    }
+
     .ins-type-{{ context.rnd }} {
         font-weight: 700;
         font-size: 85%;
@@ -259,9 +270,12 @@
         max-width: 200px;
         text-overflow: ellipsis;
         overflow: hidden;
-        white-space: nowrap;
         vertical-align: middle;
         color: #000000;
+    }
+
+    .col-name-{{ context.rnd }}:hover {
+        overflow-wrap: break-word;
     }
 
     .col-cat-{{ context.rnd }} {
@@ -323,6 +337,10 @@
         cursor: default;
     }
 
+    .plot-legend-{{ context.rnd }}:hover .legend-color-{{ context.rnd }} {
+        filter: unset;
+    }
+
     .legend-bar-{{ context.rnd }} {
         height: 20px;
         display: flex;
@@ -334,7 +352,7 @@
     .legend-color-{{ context.rnd }} {
         width: 15px;
         height: 15px;
-        filter: opacity(0.5);
+        filter: opacity(0.6);
         border: 1px solid #444444;
     }
 
@@ -344,7 +362,7 @@
         color: #444444
     }
 
-    .insight-container-{{ context.rnd }} {
+    .info-container-{{ context.rnd }} {
         width: 300px;
         height: 0;
         position: relative;
@@ -364,7 +382,7 @@
         cursor: pointer;
         position: absolute;
         left: 275px;
-        bottom: -8px;
+        bottom: -5px;
         margin: 0;
         z-index: 1;
     }
@@ -379,12 +397,13 @@
         background: rgba(0, 0, 0, 0.1);
         color: #ffffffe0;
         padding: 10px;
-        margin: 5px 0px;
+        margin: 10px auto;
+        width: 240px;
     }
 
     .htg-entry-conf-{{ context.rnd }} {
         font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
-        font-size: 85%;
+        font-size: 12px;
         background: rgb(187, 71, 103);
         width: fit-content;
         border: 1px solid white;
@@ -394,17 +413,19 @@
 
     .htg-entry-desc-{{ context.rnd }} {
         font-family: sans-serif;
-        font-size: 110%;
+        font-size: 12px;
         color: #909599;
         cursor: default;
+        padding: 2px 5px;
     }
 
     .htg-copy-btn-{{ context.rnd }} {
         border: 1px solid white;
-        border-radius: 5px;
-        margin: auto 25%;
+        border-radius: 3px;
+        margin: 10px 25%;
         width: 50%;
         margin-top: 10px;
+        font-size: 12px;
     }
 
     .htg-copy-btn-{{ context.rnd }}:hover {
