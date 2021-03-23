@@ -469,6 +469,7 @@ def render_comparison_grid(itmdt: Intermediate, cfg: Config) -> Dict[str, Any]:
         "legend_labels": [
             {"label": label, "color": color} for label, color in zip(cfg.diff.label, CATEGORY10[:len(cfg.diff.label)])
         ],
+        "baseline": baseline
     }
 
 
